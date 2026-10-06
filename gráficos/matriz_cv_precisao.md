@@ -1,0 +1,4 @@
+| Classe real / prevista | Legítimo | Spam |
+| --- | --- | --- |
+| Legítimo | 2174 | 2 |
+| Spam | 87 | 294 |

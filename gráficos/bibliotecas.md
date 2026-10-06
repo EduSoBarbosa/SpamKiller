@@ -1,0 +1,13 @@
+| Biblioteca / ambiente | Versão original | Uso |
+| --- | --- | --- |
+| Python | 3.13.16 | Linguagem e biblioteca padrão |
+| NumPy | 2.1.3 | Vetores, limiares e verificações numéricas |
+| pandas | 2.2.3 | DataFrames, limpeza e tabelas |
+| scikit-learn | 1.6.1 | TF-IDF, SGD, pipeline, validação e métricas |
+| SciPy | 1.16.3 | Suporte numérico e matrizes esparsas |
+| Beautiful Soup | 4.13.5 | Extração de texto do HTML |
+| Matplotlib | Não registrada na exportação | Matrizes de confusão e curva ROC |
+| joblib | 1.6.0 | Persistência dos pipelines |
+| cloudpickle | 3.1.2 | Persistência das funções do notebook |
+| Jupyter / IPython | Não registrada | Execução interativa e display |
+| google.colab | Ambiente Colab | Download do ZIP no notebook |

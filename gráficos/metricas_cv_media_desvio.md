@@ -1,0 +1,5 @@
+| Métrica (spam) | Média | Desvio entre folds |
+| --- | --- | --- |
+| Precisão | 0,9701 | 0,0189 |
+| Recall | 0,8478 | 0,0306 |
+| F1 | 0,9045 | 0,0208 |

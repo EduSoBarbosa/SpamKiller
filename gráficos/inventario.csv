@@ -1,0 +1,12 @@
+﻿Caminho,Conteúdo
+README.md,Documentação e interpretação dos resultados
+Classificação_de_Spamipynb(1).ipynb,"Notebook enviado, preservado sem alterações"
+modelos/spam_precisao.joblib,Pipeline treinado e limiar de precisão
+modelos/spam_recall.joblib,Mesmo pipeline e limiar de recall
+modelos/preprocessamento.pkl,Funções de limpeza serializadas
+modelos/metadados.json,"Versões, limiares completos e métricas"
+modelos/requirements.txt,Dependências fixadas na exportação original
+modelos/usar_modelo.py,Funções de carregamento e inferência
+requirements-notebook.txt,Dependências adicionais para executar o notebook localmente
+gráficos/,Imagens e todas as tabelas do README em CSV e Markdown
+SHA256SUMS.txt,Checksums dos arquivos do pacote

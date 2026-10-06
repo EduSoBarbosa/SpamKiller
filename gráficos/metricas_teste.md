@@ -1,0 +1,10 @@
+| Indicador | Resultado |
+| --- | --- |
+| Precisão | 98,55% |
+| Recall | 71,58% |
+| F1 | 82,93% |
+| Verdadeiros negativos | 544 |
+| Falsos positivos | 1 |
+| Falsos negativos | 27 |
+| Verdadeiros positivos | 68 |
+| Taxa de falsos positivos | 0,18% |

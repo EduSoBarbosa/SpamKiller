@@ -1,0 +1,4 @@
+-r modelos/requirements.txt
+matplotlib
+jupyterlab
+ipykernel
