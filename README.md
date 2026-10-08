@@ -1,4 +1,6 @@
-# Classificação de spam — TF-IDF e SGDClassifier
+# SpamKiller
+
+**Classificação de e-mails com TF-IDF e regressão logística treinada via SGD.**
 
 Projeto de aprendizado de máquina para classificar e-mails como **legítimos (0)** ou **spam (1)** e investigar como o limiar de decisão altera o custo dos erros. O trabalho abrange leitura de mensagens MIME, limpeza textual, auditoria de dados, representação TF-IDF, validação cruzada estratificada, seleção de limiares, avaliação em teste e exportação para inferência.
 
@@ -6,20 +8,74 @@ Projeto de aprendizado de máquina para classificar e-mails como **legítimos (0
 
 São disponibilizados dois arquivos de modelo, mas **não são dois treinamentos distintos**: ambos contêm o mesmo pipeline ajustado, com regras de decisão diferentes. O modo de recall é um experimento complementar, sem avaliação independente no teste.
 
-## Conteúdo
+## Navegação
 
-1. [Dados e preparação](#dados-e-preparação)
-2. [Pré-processamento e vazamento](#pré-processamento-e-vazamento)
-3. [Modelo e validação](#modelo-e-validação)
-4. [Decisão entre precisão e recall](#decisão-entre-precisão-e-recall)
-5. [Avaliação final e ROC](#avaliação-final-e-roc)
-6. [Bibliotecas e ambiente](#bibliotecas-e-ambiente)
-7. [Estrutura e uso dos modelos](#estrutura-e-uso-dos-modelos)
-8. [Reprodução e limitações](#reprodução-e-limitações)
+- [Início rápido](#início-rápido)
+- [Dados e preparação](#dados-e-preparação)
+- [Pré-processamento e vazamento](#pré-processamento-e-vazamento)
+- [Modelo e validação](#modelo-e-validação)
+- [Decisão entre precisão e recall](#decisão-entre-precisão-e-recall)
+- [Avaliação final e ROC](#avaliação-final-e-roc)
+- [Bibliotecas e ambiente](#bibliotecas-e-ambiente)
+- [Estrutura e persistência](#estrutura-e-persistência)
+- [Reprodução e limitações](#reprodução-e-limitações)
+
+## Início rápido
+
+Os modelos treinados já estão disponíveis no repositório. Para executar a inferência, não é necessário baixar o corpus nem refazer o treinamento.
+
+### Instalar e executar o exemplo
+
+Use um ambiente Python compatível com as versões registradas na exportação, especialmente para carregar funções serializadas por cloudpickle. A partir do terminal:
+
+```bash
+git clone https://github.com/EduSoBarbosa/SpamKiller.git
+cd SpamKiller
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r modelos/requirements.txt
+python modelos/usar_modelo.py
+```
+
+Para também trabalhar no notebook localmente:
+
+```bash
+python -m pip install -r requirements-notebook.txt
+python -m jupyter lab
+```
+
+### Classificar assunto e corpo em texto simples
+
+Na raiz do projeto, em um script ou sessão Python:
+
+```python
+from modelos.usar_modelo import carregar, classificar
+pacote, funcoes = carregar("precisao")  # ou "recall"
+resultado = classificar(
+    assunto="Meeting tomorrow",
+    corpo="Hi team, our project meeting is tomorrow at 10 AM.",
+    pacote=pacote,
+    funcoes=funcoes
+)
+print(resultado)
+```
+
+O retorno inclui classe, rótulo, estimativa de probabilidade, limiar e configuração. Para comparar modos, carregue cada pacote e classifique a mesma mensagem; as probabilidades devem coincidir, embora a decisão possa mudar.
+
+### Classificar um arquivo de e-mail bruto
+
+```python
+from modelos.usar_modelo import carregar, classificar_arquivo
+pacote, funcoes = carregar("precisao")
+resultado = classificar_arquivo("mensagem.eml", pacote, funcoes)
+print(resultado)
+```
+
+`classificar()` pressupõe corpo já em texto simples. Para HTML e MIME, use a leitura do arquivo bruto, que aplica `processar_email()`. Não refaça `fit()` ou `fit_transform()` ao prever uma mensagem.
 
 ## Dados e preparação
 
-O notebook utiliza os arquivos `20030228_easy_ham.tar.bz2`, `20030228_hard_ham.tar.bz2` e `20030228_spam.tar.bz2` do corpus SpamAssassin. As pastas `easy_ham` e `hard_ham` recebem rótulo 0; `spam` recebe rótulo 1. Os arquivos brutos não acompanham este pacote: não estavam nos anexos enviados.
+O notebook utiliza os arquivos `20030228_easy_ham.tar.bz2`, `20030228_hard_ham.tar.bz2` e `20030228_spam.tar.bz2` do corpus SpamAssassin. As pastas `easy_ham` e `hard_ham` recebem rótulo 0; `spam` recebe rótulo 1. Os dados brutos não estão versionados neste repositório. Para reproduzir o treinamento, obtenha esses arquivos na [fonte oficial do corpus SpamAssassin](https://spamassassin.apache.org/old/publiccorpus/) e coloque-os no diretório de trabalho do notebook.
 
 A inspeção inicial identificou um arquivo auxiliar `cmds` em cada pasta. A versão final de `carregar_pasta()` os ignora. Após essa exclusão, o notebook registrou 3.250 mensagens, nenhum valor ausente, nenhum texto vazio e 53 duplicatas de texto processado. Não foram encontrados textos idênticos com rótulos conflitantes. Após a deduplicação, restaram 3.197 mensagens.
 
@@ -30,8 +86,7 @@ A inspeção inicial identificou um arquivo auxiliar `cmds` em cada pasta. A ver
 | Treino | 2176 | 381 | 2557 |
 | Teste | 545 | 95 | 640 |
 
-Dados: [CSV](gráficos/distribuicao_dados.csv) · [Tabela Markdown](gráficos/distribuicao_dados.md)
-
+Dados da tabela: [CSV](gráficos/distribuicao_dados.csv)
 
 As contagens após a limpeza e por partição foram consolidadas a partir das matrizes e dos totais registrados: 2.721 legítimos e 476 spams, aproximadamente 85,11% e 14,89%. O desbalanceamento exige analisar a classe spam separadamente: prever sempre a classe majoritária já produziria cerca de 85% de acurácia, sem detectar spam algum.
 
@@ -47,14 +102,13 @@ A divisão foi feita por `train_test_split(test_size=0.20, random_state=42, stra
 | processar_email | Lê bytes com BytesParser; une assunto e corpo tratados |
 | carregar_pasta | Ignora cmds e diretórios; associa o texto não vazio ao rótulo da pasta |
 
-Dados: [CSV](gráficos/funcoes_preprocessamento.csv) · [Tabela Markdown](gráficos/funcoes_preprocessamento.md)
-
+Dados da tabela: [CSV](gráficos/funcoes_preprocessamento.csv)
 
 O modelo recebe **assunto + corpo**, sem incorporar os demais cabeçalhos externos. Isso exclui da entrada cabeçalhos como `X-Spam-Status`, `X-Spam-Flag`, `Received` e `Message-ID`, que poderiam introduzir decisões prévias de filtros ou características específicas da coleta. As marcações reconhecidas no assunto, como `[SPAM]` e `***SPAM***`, também são removidas.
 
 A limpeza preserva as demais palavras, números e pontuação; não aplica stemming, lematização nem remoção explícita de stopwords. URLs e endereços são substituídos por marcadores, preservando sua presença e descartando detalhes. A tokenização posterior do TF-IDF modifica essa representação: usa minúsculas e, por padrão, termos alfanuméricos com pelo menos dois caracteres; não modela pontuação como característica isolada.
 
-**Limites da implementação preservada:** versões alternativas HTML e texto simples são concatenadas e podem repetir conteúdo. `except: pass` pode ocultar falhas; assinaturas, citações e mensagens encaminhadas permanecem. Ignorar uma parte MIME marcada como anexo não garante a exclusão de todos os descendentes de um anexo multipartes. A extração HTML remove atributos como `href`, perdendo sinais de domínio. A função não multipartes não restringe explicitamente a extração a texto.
+**Limites do pré-processamento:** versões alternativas HTML e texto simples são concatenadas e podem repetir conteúdo. `except: pass` pode ocultar falhas; assinaturas, citações e mensagens encaminhadas permanecem. Ignorar uma parte MIME marcada como anexo não garante a exclusão de todos os descendentes de um anexo multipartes. A extração HTML remove atributos como `href`, perdendo sinais de domínio. A função não multipartes não restringe explicitamente a extração a texto.
 
 Essas regras são fixas e podem ser aplicadas antes da divisão. Já o vocabulário e os pesos IDF são aprendidos **dentro do pipeline**, somente no treino de cada fold. A deduplicação exata ajuda, mas não impede compartilhamento de campanhas ou conversas quase idênticas entre partições.
 
@@ -90,8 +144,7 @@ Foram usados 5 folds com `StratifiedKFold(n_splits=5, shuffle=True, random_state
 | Recall | 0,8478 | 0,0306 |
 | F1 | 0,9045 | 0,0208 |
 
-Dados: [CSV](gráficos/metricas_cv_media_desvio.csv) · [Tabela Markdown](gráficos/metricas_cv_media_desvio.md)
-
+Dados da tabela: [CSV](gráficos/metricas_cv_media_desvio.csv)
 
 Os desvios acima descrevem a variação entre folds; não são intervalos de confiança. Precisão, recall e F1 usam spam (1) como classe positiva.
 
@@ -115,8 +168,7 @@ As pontuações vieram de `cross_val_predict(..., method="predict_proba")[:, 1]`
 | Prioriza precisão | 0,680203 | 99,32% | 77,17% | 2174 | 2 | 87 | 294 |
 | Prioriza recall | 0,080886 | 69,49% | 99,21% | 2010 | 166 | 3 | 378 |
 
-Dados: [CSV](gráficos/comparacao_limiares_cv.csv) · [Tabela Markdown](gráficos/comparacao_limiares_cv.md)
-
+Dados da tabela: [CSV](gráficos/comparacao_limiares_cv.csv)
 
 ![Comparação das regras de decisão nos dados de seleção](gráficos/comparacao_limiares.png)
 
@@ -143,8 +195,7 @@ Após fixar o limiar de precisão, o pipeline foi ajustado com todo o treino. No
 | Verdadeiros positivos | 68 |
 | Taxa de falsos positivos | 0,18% |
 
-Dados: [CSV](gráficos/metricas_teste.csv) · [Tabela Markdown](gráficos/metricas_teste.md)
-
+Dados da tabela: [CSV](gráficos/metricas_teste.csv)
 
 ![Matriz de confusão final no teste](gráficos/matriz_confusao_teste.png)
 
@@ -158,7 +209,7 @@ Dos 545 legítimos, 544 foram preservados. Dos 95 spams, 68 foram detectados e 2
 
 O eixo horizontal mostra FP/(FP+VN), a taxa de falsos positivos; o vertical mostra o recall. O ponto vermelho corresponde ao limiar escolhido: aproximadamente 0,18% de falsos positivos e 71,58% de recall. A diagonal representa ordenação aleatória; proximidade do canto superior esquerdo indica boa separação nesta amostra.
 
-A legenda original exibe **AUC = 1,00 com arredondamento para duas casas**. Isso não comprova uma AUC exatamente igual a 1, nem classificação perfeita. A AUC mede ordenação ao variar o limiar; a precisão e a matriz descrevem um corte específico. O valor numérico completo e as pontuações individuais não foram exportados; por isso não se inventa um valor mais preciso nem uma tabela de coordenadas da curva. A imagem foi extraída diretamente do notebook.
+A legenda original exibe **AUC = 1,00 com arredondamento para duas casas**. Isso não comprova uma AUC exatamente igual a 1, nem classificação perfeita. A AUC mede ordenação ao variar o limiar; a precisão e a matriz descrevem um corte específico. O valor numérico completo e as pontuações individuais não foram exportados; por isso o README mantém apenas o valor arredondado apresentado na figura. A imagem foi extraída diretamente do notebook.
 
 ### Exemplo manual
 
@@ -166,7 +217,7 @@ O notebook também cria uma mensagem fictícia em inglês com promessa de prêmi
 
 ## Bibliotecas e ambiente
 
-| Biblioteca / ambiente | Versão original | Uso |
+| Biblioteca / ambiente | Versão registrada | Uso |
 | --- | --- | --- |
 | Python | 3.13.16 | Linguagem e biblioteca padrão |
 | NumPy | 2.1.3 | Vetores, limiares e verificações numéricas |
@@ -180,19 +231,18 @@ O notebook também cria uma mensagem fictícia em inglês com promessa de prêmi
 | Jupyter / IPython | Não registrada | Execução interativa e display |
 | google.colab | Ambiente Colab | Download do ZIP no notebook |
 
-Dados: [CSV](gráficos/bibliotecas.csv) · [Tabela Markdown](gráficos/bibliotecas.md)
-
+Dados da tabela: [CSV](gráficos/bibliotecas.csv)
 
 Módulos da biblioteca padrão usados incluem `os`, `tarfile`, `re`, `email.policy`, `email.parser.BytesParser`, `pathlib`, `datetime`, `importlib.metadata`, `json`, `platform` e `shutil`. Eles não exigem instalação separada.
 
-O ambiente registrado na exportação é Python **3.13.16**. As versões fixadas são as dos arquivos enviados, não versões inferidas do ambiente em que este README foi montado. Matplotlib e Jupyter não tiveram versões registradas; o arquivo complementar os inclui sem fixação, logo não representa um lock completo de reprodução.
+O ambiente registrado na exportação é Python **3.13.16**. As versões indicadas correspondem aos metadados de exportação dos modelos; não constituem uma validação de compatibilidade em outros ambientes. Matplotlib e Jupyter não tiveram versões registradas; o arquivo complementar os inclui sem fixação, logo não representa um lock completo de reprodução.
 
-## Estrutura e uso dos modelos
+## Estrutura e persistência
 
 | Caminho | Conteúdo |
 | --- | --- |
 | README.md | Documentação e interpretação dos resultados |
-| Classificação_de_Spamipynb(1).ipynb | Notebook enviado, preservado sem alterações |
+| `Classificação_de_Spamipynb(1).ipynb` | Notebook com preparação, experimentos, avaliação e exportação |
 | modelos/spam_precisao.joblib | Pipeline treinado e limiar de precisão |
 | modelos/spam_recall.joblib | Mesmo pipeline e limiar de recall |
 | modelos/preprocessamento.pkl | Funções de limpeza serializadas |
@@ -201,67 +251,17 @@ O ambiente registrado na exportação é Python **3.13.16**. As versões fixadas
 | modelos/usar_modelo.py | Funções de carregamento e inferência |
 | requirements-notebook.txt | Dependências adicionais para executar o notebook localmente |
 | gráficos/ | Imagens e todas as tabelas do README em CSV e Markdown |
-| SHA256SUMS.txt | Checksums dos arquivos do pacote |
+| `SHA256SUMS.txt` | Manifesto de integridade da exportação original; deve ser atualizado quando arquivos listados forem alterados |
 
-Dados: [CSV](gráficos/inventario.csv) · [Tabela Markdown](gráficos/inventario.md)
+Dados da tabela: [CSV](gráficos/inventario.csv)
 
-
-Os seis arquivos da exportação original estão diretamente em `modelos/`, com bytes preservados. O notebook também foi preservado integralmente. Cada tabela deste README tem uma cópia CSV e Markdown em `gráficos/`. As três imagens originais foram extraídas das saídas do notebook; o gráfico comparativo foi criado com as contagens documentadas, sem novo treinamento.
-
-### Instalação local
-
-Use um ambiente Python compatível com a versão original, especialmente para carregar funções serializadas por cloudpickle. Na raiz extraída:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r modelos/requirements.txt
-python modelos/usar_modelo.py
-```
-
-Para também trabalhar no notebook localmente:
-
-```bash
-python -m pip install -r requirements-notebook.txt
-python -m jupyter lab
-```
-
-### Classificar assunto e corpo em texto simples
-
-Na raiz do projeto, em um script ou sessão Python:
-
-```python
-from modelos.usar_modelo import carregar, classificar
-
-pacote, funcoes = carregar("precisao")  # ou "recall"
-resultado = classificar(
-    assunto="Meeting tomorrow",
-    corpo="Hi team, our project meeting is tomorrow at 10 AM.",
-    pacote=pacote,
-    funcoes=funcoes
-)
-print(resultado)
-```
-
-O retorno inclui classe, rótulo, estimativa de probabilidade, limiar e configuração. Para comparar modos, carregue cada pacote e classifique a mesma mensagem; as probabilidades devem coincidir, embora a decisão possa mudar.
-
-### Classificar um arquivo de e-mail bruto
-
-```python
-from modelos.usar_modelo import carregar, classificar_arquivo
-
-pacote, funcoes = carregar("precisao")
-resultado = classificar_arquivo("mensagem.eml", pacote, funcoes)
-print(resultado)
-```
-
-`classificar()` pressupõe corpo já em texto simples. Para HTML e MIME, use a leitura do arquivo bruto, que aplica `processar_email()`. Não refaça `fit()` ou `fit_transform()` ao prever uma mensagem.
+Os modelos, as funções de inferência e os metadados estão em `modelos/`. As figuras e tabelas de apoio ficam em `gráficos/`. Os resultados apresentados correspondem às saídas registradas no notebook e aos metadados dos modelos. O gráfico comparativo de limiares usa essas contagens; não representa um treinamento adicional.
 
 ### Persistência
 
 Cada `.joblib` guarda o pipeline, o limiar completo, a classe positiva, o mapeamento de rótulos e a versão do artefato. `preprocessamento.pkl` guarda as quatro funções necessárias à limpeza externa ao pipeline. `metadados.json` mantém métricas e versões; o modo recall aparece com teste `null`, pois não foi avaliado independentemente.
 
-O notebook registra uma verificação de carregamento dos dois pacotes: as probabilidades em dez textos de treino foram comparadas às do pipeline em memória e os limiares foram conferidos. Ao montar este pacote, foram verificadas integridade dos arquivos, sintaxe dos scripts e referências do README. Não houve novo treinamento nem reexecução do teste nesta montagem.
+O notebook registra uma verificação de carregamento dos dois pacotes: as probabilidades em dez textos de treino foram comparadas às do pipeline em memória e os limiares foram conferidos. Essa verificação de persistência não substitui a avaliação em dados não vistos.
 
 Carregue arquivos pickle/joblib somente de origem confiável: a desserialização pode executar código. A compatibilidade desses formatos depende do ambiente; cloudpickle não substitui o código-fonte legível preservado no notebook.
 
@@ -276,15 +276,23 @@ O notebook original contém uma observação antiga dizendo que arquivos auxilia
 Outras limitações:
 
 - Corpus histórico, com exemplos demonstrados em inglês; desempenho em português ou mensagens atuais não foi estabelecido.
+
 - Deduplicação exata, sem agrupamento por conversa, remetente ou campanha; mensagens quase iguais podem atravessar partições.
+
 - Texto simples/HTML pode ser contado duas vezes; erros de parsing podem ser silenciosos.
+
 - Sem estudo de calibração, intervalos de confiança, busca de hiperparâmetros ou comparação com outros algoritmos.
+
 - Resultados dos limiares na CV são de seleção; a configuração de recall foi explorada depois de o teste ter sido observado e não possui confirmação independente.
+
 - ROC AUC alta não implica precisão perfeita, segurança ou detecção específica de fraudes.
-- O conjunto bruto, licenças do corpus e histórico completo do ambiente não acompanham os anexos; nenhuma licença de redistribuição foi presumida para este projeto.
+
+- Os dados brutos não estão versionados e o ambiente não possui um lock completo. Consulte os termos da fonte antes de redistribuir o corpus.
 
 Como evolução, é possível melhorar a extração MIME, registrar falhas, separar campanhas entre partições e avaliar em outro corpus reservado. Novas escolhas devem usar treino/validação; o teste já observado não deve servir para ajustar versões e continuar sendo anunciado como avaliação final independente.
 
-## Proveniência
+## Fonte dos dados e autoria
 
-Documentação baseada no notebook e no ZIP fornecidos pelo autor. Nenhum dado sintético foi incluído no treinamento; o e-mail fictício aparece apenas como demonstração. As tabelas consolidadas derivam das saídas registradas e dos metadados. O pacote preserva os modelos recebidos e documenta os resultados existentes, sem alegar reexecução integral.
+Projeto desenvolvido por [Eduardo Barbosa](https://github.com/EduSoBarbosa), com dados do [corpus público do Apache SpamAssassin](https://spamassassin.apache.org/old/publiccorpus/). Este é um projeto independente de estudo e não implica afiliação ou endosso da Apache Software Foundation.
+
+As métricas e tabelas documentam os experimentos registrados no notebook e nos metadados dos modelos. Nenhum dado sintético foi incluído no treinamento; a mensagem fictícia aparece apenas como demonstração de inferência.

@@ -1,0 +1,31 @@
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Arquivos temporários do Jupyter
+.ipynb_checkpoints/
+
+# Dados brutos do SpamAssassin
+spamassassin_data/
+20030228_*.tar.bz2
+
+# Pacotes compactados
+*.zip
+
+# Exportações automáticas geradas ao executar o notebook
+spam_classifier_*/
+
+# Credenciais e configurações locais
+.env
+.env.*
+!.env.example
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
